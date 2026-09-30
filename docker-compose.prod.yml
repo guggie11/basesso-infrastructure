@@ -1,54 +1,85 @@
 services:
   app:
     build:
-      context: ../appbase-backend
+      context: ../basesso-backend
+      dockerfile: ../basesso-infrastructure/Dockerfile.backend
+    container_name: basesso-app
     ports:
-      - "8000:8000"
+      - "8001:8000"
     env_file:
-      - ../appbase-backend/.env
+      - ../basesso-backend/.env.prod
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
-      - appbase-net
+      - basesso-net
     restart: unless-stopped
 
   frontend:
     build:
-      context: ../appbase-frontend
-      dockerfile: ../appbase-infrastructure/Dockerfile.frontend
+      context: ../basesso-frontend
+      dockerfile: ../basesso-infrastructure/Dockerfile.frontend
+    container_name: basesso-frontend
     ports:
-      - "80:80"
+      - "81:80"
     depends_on:
       - app
     networks:
-      - appbase-net
+      - basesso-net
     restart: unless-stopped
 
   db:
     image: postgres:16-alpine
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    container_name: basesso-db
     environment:
-      POSTGRES_DB: appbase
-      POSTGRES_USER: appbase
-      POSTGRES_PASSWORD: appbase
+      POSTGRES_USER: basesso
+      POSTGRES_PASSWORD: basesso
+      POSTGRES_DB: basesso
+    ports:
+      - "5433:5432"
+    volumes:
+      - basesso_postgres_data:/var/lib/postgresql/data
     networks:
-      - appbase-net
+      - basesso-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U basesso -d basesso"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    container_name: basesso-redis
+    ports:
+      - "6380:6379"
     volumes:
-      - redis_data:/data
+      - basesso_redis_data:/data
     networks:
-      - appbase-net
+      - basesso-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: basesso-mailpit
+    ports:
+      - "1026:1025"
+      - "8026:8025"
+    networks:
+      - basesso-net
     restart: unless-stopped
 
 volumes:
-  postgres_data:
-  redis_data:
+  basesso_postgres_data:
+  basesso_redis_data:
 
 networks:
-  appbase-net:
+  basesso-net:
     driver: bridge
